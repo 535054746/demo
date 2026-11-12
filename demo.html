@@ -1,0 +1,259 @@
+<!doctype html>
+<!--
+启动后端：.\.venv\Scripts\python.exe main.py，然后打开此 HTML 页面。
+页面与后端不同源时，需要后端允许页面来源的 CORS 跨域请求。
+场景一：POST /claims/analyze；场景二：POST /tracking/query；场景三：POST /complaint/analyze。
+页面直接请求 http://127.0.0.1:8000，API Key 仅由后端读取。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 客服助手</title>
+  <link rel="icon" href="data:,">
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f4f6fa; color: #243047; font: 15px/1.7 system-ui, "Microsoft YaHei", sans-serif; }
+    button, input, select, textarea { font: inherit; }
+    button { cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .55; }
+    input, select, textarea { min-width: 0; border: 1px solid #d8deea; border-radius: 7px; padding: 8px 10px; background: #fff; color: inherit; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid #a9c4ff; outline-offset: 1px; }
+    button { border: 1px solid #d8deea; border-radius: 7px; padding: 8px 14px; background: #fff; color: inherit; }
+    .primary { background: #3568db; border-color: #3568db; color: white; }
+    .app { max-width: 960px; height: 100dvh; margin: auto; background: #fff; display: flex; flex-direction: column; }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid #e8ecf3; }
+    h1 { margin: 0; font-size: 21px; }
+    p { margin: 0; }
+    .muted { font-size: 12px; color: #66748a; }
+    fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+    .settings { padding: 14px 24px 12px; border-bottom: 1px solid #e8ecf3; background: #fcfdff; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; }
+    label { display: grid; gap: 4px; font-size: 12px; color: #53617a; flex: 1; min-width: 140px; }
+    .row input, .row select { width: 100%; font-size: 13px; }
+    .extra { margin-top: 10px; }
+    [hidden] { display: none !important; }
+    .help { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 9px; }
+    .link { border: 0; padding: 0; color: #3568db; font-size: 12px; white-space: nowrap; }
+    #chat { flex: 1; overflow-y: auto; padding: 24px; min-height: 0; }
+    .message { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 22px; }
+    .message.user { align-items: flex-end; }
+    .name { font-size: 12px; color: #748098; margin: 0 4px 6px; }
+    .bubble { max-width: 92%; padding: 12px 16px; border-radius: 12px; background: #f2f4f8; overflow-wrap: anywhere; }
+    .user .bubble { background: #eaf0ff; color: #294f99; }
+    .text { white-space: pre-wrap; }
+    .error .bubble { background: #fff1ef; color: #a33d32; }
+    .card { border-top: 1px solid #d9dfeb; margin-top: 14px; padding-top: 12px; }
+    .record { font-size: 12px; color: #596981; white-space: pre-wrap; margin-bottom: 10px; }
+    .card form { display: grid; gap: 10px; }
+    .card fieldset { display: grid; gap: 10px; }
+    .card label { min-width: 0; }
+    .card input, .card select, .card textarea { width: 100%; font-size: 13px; }
+    .check { display: flex; align-items: flex-start; gap: 7px; }
+    .check input { width: 15px; margin-top: 4px; accent-color: #3568db; }
+    .refresh { margin-top: 10px; }
+    details { margin-top: 12px; font-size: 12px; color: #65728a; }
+    summary { cursor: pointer; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; font: 12px/1.6 Consolas, monospace; }
+    footer { border-top: 1px solid #e8ecf3; padding: 14px 24px; }
+    #composer { display: flex; align-items: flex-end; gap: 10px; }
+    #question { flex: 1; resize: vertical; height: 76px; max-height: 180px; }
+    footer .muted { margin-top: 7px; }
+    @media (max-width: 600px) {
+      header, .settings, #chat, footer { padding-left: 14px; padding-right: 14px; }
+      header { padding-top: 13px; padding-bottom: 13px; }
+      header .muted { max-width: 240px; }
+      label { min-width: 120px; }
+      #scene-label { flex-basis: 100%; }
+      .bubble { max-width: 100%; }
+      #composer { gap: 7px; }
+      #send { padding: 8px 12px; }
+      .help { align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div><h1>AI 客服助手</h1><p class="muted">物流咨询 · 异常索赔 · 客诉处理</p></div>
+    <button id="clear" type="button">新对话</button>
+  </header>
+  <section class="settings" aria-label="咨询信息">
+    <fieldset id="settings">
+      <div class="row">
+        <label id="scene-label">处理场景<select id="scene"><option value="tracking">场景二：物流状态咨询</option><option value="claims">场景一：物流异常及索赔</option><option value="complaint">场景三：客诉处理</option></select></label>
+        <label>订单号 · 选填<input id="order" maxlength="64" placeholder="可在聊天中补充"></label>
+        <label>运单号 · 选填<input id="tracking" maxlength="64" placeholder="多包裹时可指定运单"></label>
+      </div>
+      <div id="claim-options" class="row extra" hidden>
+        <label>异常类型<select id="problem"><option value="tracking_stalled">物流长时间未更新</option><option value="delivered_not_received">妥投未收到</option><option value="damaged">商品破损</option><option value="other">其他</option></select></label>
+        <label>线索来源<select id="source"><option value="customer">客户反馈</option><option value="order_team">订单部反馈</option></select></label>
+      </div>
+      <div id="complaint-options" class="row extra" hidden>
+        <label>受理渠道<select id="channel"><option value="email">邮件</option><option value="site_message">站内信</option></select></label>
+        <label>渠道工单号 · 选填<input id="ticket" maxlength="64" placeholder="留空自动生成演示编号"></label>
+      </div>
+      <div class="help"><span class="muted" id="hint">不填订单号和运单号，将查询当前用户的订单。</span><button type="button" id="example" class="link">填入示例订单</button></div>
+    </fieldset>
+  </section>
+  <main id="chat" role="log" aria-label="客服对话" aria-live="polite"></main>
+  <footer>
+    <form id="composer"><textarea id="question" aria-label="输入问题" maxlength="1000" required placeholder="输入问题，例如：我的包裹到哪里了？"></textarea><button id="send" type="submit" class="primary">发送</button></form>
+    <p class="muted" id="status">Enter 发送，Shift + Enter 换行。索赔与客诉执行均为模拟登记。</p>
+  </footer>
+</div>
+<script>
+'use strict';
+// 后端服务地址，三个场景的查询、分析、确认与结案请求统一使用此地址。
+const API_BASE_URL = 'http://127.0.0.1:8000';
+// 1. 页面辅助方法。后端返回的文字使用 textContent 展示，避免执行其中的 HTML。
+const $ = id => document.getElementById(id);
+const read = id => $(id).value.trim();
+const statuses = {pending_confirmation:'待确认', submitted_mock:'已模拟提交', pending_review:'待审核', executed_mock:'已模拟执行', closed:'已结案'};
+let busy = false;
+let pending = null; // 暂存追问前的问题，例如先问“能否索赔”，再补充订单号。
+function message(role, text, error=false) {
+  const box = document.createElement('div');
+  box.className = 'message ' + role + (error ? ' error' : '');
+  const name = document.createElement('div'); name.className = 'name'; name.textContent = role === 'user' ? '你' : '客服助手';
+  const bubble = document.createElement('div'); bubble.className = 'bubble';
+  const content = document.createElement('div'); content.className = 'text'; content.textContent = text;
+  bubble.append(content); box.append(name, bubble); $('chat').append(box);
+  scrollBottom(); return {box, bubble, content};
+}
+function scrollBottom() { $('chat').scrollTop = $('chat').scrollHeight; }
+function setBusy(value) {
+  busy = value;
+  document.querySelectorAll('fieldset, #question, #send, #clear').forEach(el => el.disabled = value);
+  $('send').textContent = value ? '处理中…' : '发送';
+  $('chat').setAttribute('aria-busy', String(value));
+}
+function replyText(reply) {
+  return typeof reply === 'string' ? reply : Array.isArray(reply) ? reply.filter(x => x.type === 'text').map(x => x.text).join('\n') : '接口未返回回复，请展开接口数据查看。';
+}
+function rawData(bubble, data) {
+  const details = document.createElement('details'); const summary = document.createElement('summary'); const pre = document.createElement('pre');
+  summary.textContent = '查看接口数据与工具调用'; pre.textContent = JSON.stringify(data, null, 2); details.append(summary, pre); bubble.append(details);
+}
+
+// 2. 统一请求方法。直接调用现有的 FastAPI 服务，不经过页面代理。
+async function api(path, body) {
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 190000);
+  try {
+    const response = await fetch(API_BASE_URL + path, {method:body === undefined ? 'GET' : 'POST', headers:body === undefined ? {} : {'Content-Type':'application/json'}, body:body === undefined ? undefined : JSON.stringify(body), signal:controller.signal});
+    const text = await response.text(); let data;
+    try { data = JSON.parse(text); } catch { throw new Error('后端未返回 JSON，请检查接口地址和后端日志。'); }
+    if (!response.ok) {
+      const detail = data.detail;
+      throw new Error(Array.isArray(detail) ? detail.map(x => x.loc.join('.') + '：' + x.msg).join('\n') : typeof detail === 'string' ? detail : '请求失败：HTTP ' + response.status);
+    }
+    return data;
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('请求超时，操作可能已经完成。已生成记录的请先刷新记录状态；分析请求请检查后端日志后再重试。');
+    if (error instanceof TypeError) throw new Error('连接失败，请确认 http://127.0.0.1:8000 已启动，并在后端允许当前页面来源的 CORS 跨域请求。');
+    throw error;
+  } finally { clearTimeout(timer); }
+}
+
+// 3. 一次聊天对应一个分析接口；缺少订单号时先追问。这里没有在浏览器中调用大模型。
+function changeScene() {
+  pending = null;
+  $('claim-options').hidden = read('scene') !== 'claims';
+  $('complaint-options').hidden = read('scene') !== 'complaint';
+  $('hint').textContent = read('scene') === 'tracking' ? '不填订单号和运单号，将查询当前用户的订单。' : '需要订单号；一个订单有多个包裹时，请明确运单号。';
+}
+async function send(event) {
+  event.preventDefault(); if (busy) return;
+  const text = read('question'); if (!text) return;
+  const scene = read('scene'); const previous = pending;
+  const content = previous ? (previous + '\n补充信息：' + text).slice(0,1024) : text;
+  // 演示编号可直接写在聊天中；其他编号可填写在上方输入框。
+  const order = text.match(/\bDEMO\d{8,}\b/i)?.[0];
+  const tracking = text.match(/\bDEMO_TRACK_\d+\b/i)?.[0];
+  if (order && order !== read('order')) { $('order').value = order; $('tracking').value = ''; }
+  if (tracking) $('tracking').value = tracking;
+  if (previous && !order && !read('order') && /^[A-Za-z0-9_-]{1,64}$/.test(text)) $('order').value = text;
+  message('user', text); $('question').value = '';
+  if (scene !== 'tracking' && !read('order')) {
+    pending = content; message('assistant', '请提供订单号，我会继续核实。可以直接回复订单号，或填写上方的订单号。'); return;
+  }
+  const common = {order_no:read('order') || null, tracking_no:read('tracking') || null};
+  let path, body;
+  if (scene === 'tracking') { path = '/tracking/query'; body = {...common, question:content}; }
+  if (scene === 'claims') { path = '/claims/analyze'; body = {...common, source:read('source'), problem_type:read('problem'), description:content}; }
+  if (scene === 'complaint') {
+    // 生成的工单号先保留在页面；失败后重试可以沿用同一编号。
+    if (!read('ticket')) $('ticket').value = 'DEMO-' + crypto.randomUUID();
+    path = '/complaint/analyze'; body = {...common, ticket_no:read('ticket'), channel:read('channel'), content};
+  }
+  setBusy(true); const waiting = message('assistant', '正在查询和分析，请稍候…');
+  try {
+    const data = await api(path, body); pending = null;
+    waiting.content.textContent = replyText(scene === 'complaint' ? data.analysis?.reply : data.reply);
+    const record = scene === 'claims' ? data.claim_record : scene === 'complaint' ? data : null;
+    if (record?.claim_id || record?.complaint_id) addRecord(waiting.bubble, scene, record);
+    if (scene === 'claims' && !record && /多个|明确.*运单/.test(waiting.content.textContent)) pending = content;
+    rawData(waiting.bubble, data);
+  } catch (error) {
+    waiting.box.classList.add('error'); waiting.content.textContent = error.message;
+    pending = previous; $('question').value = text;
+  } finally { setBusy(false); scrollBottom(); }
+}
+
+// 4. 关键操作放在回复下方，客服填写、勾选后才调用确认或结案接口。
+function addRecord(bubble, scene, initial) {
+  let record = initial;
+  const card = document.createElement('section'); card.className = 'card'; bubble.append(card);
+  function render() {
+    card.replaceChildren();
+    const info = document.createElement('p'); info.className = 'record';
+    const id = record.claim_id || record.complaint_id;
+    info.textContent = '记录：' + id + '\n状态：' + (statuses[record.status] || record.status);
+    if (record.claim_no) info.textContent += '\n售后编号：' + record.after_sale_no + '\n索赔编号：' + record.claim_no;
+    if (record.execution) info.textContent += '\n执行编号：' + record.execution.execution_no;
+    if (record.review) info.textContent += '\n复盘：' + record.review.summary;
+    card.append(info);
+    const closing = record.status === 'executed_mock';
+    if (['pending_confirmation','pending_review','executed_mock'].includes(record.status)) {
+      const form = document.createElement('form');
+      // 这里只有固定模板；接口返回的编号与文本不会插入 innerHTML。
+      form.innerHTML = '<fieldset><label>处理客服<input name="operator" value="CS001" maxlength="64" required></label>' + (closing ? '<label>处理结果<textarea name="outcome" maxlength="1000" required></textarea></label><label>改进点<textarea name="improvement" maxlength="1000" required></textarea></label>' : scene === 'complaint' ? '<label>处理方案<select name="action"><option value="follow_up">继续跟进</option><option value="goodwill">挽留补偿</option><option value="refund">退款</option><option value="reship">补发</option></select></label><label>金额（币种按后端规则）<input name="amount" type="number" min="0" max="99999999.99" step="0.01" value="0" disabled required></label><label>目标运单 · 多包裹请明确<input name="tracking_no" maxlength="64"></label><label>审核依据与处理说明<textarea name="note" maxlength="1000" required></textarea></label>' : '') + (closing ? '' : '<label class="check"><input type="checkbox" name="confirmed" required>已核实本次处理，确认模拟执行</label>') + '<button class="primary" type="submit">' + (closing ? '保存复盘并结案' : scene === 'claims' ? '确认并模拟提交索赔' : '确认方案并模拟执行') + '</button></fieldset>';
+      if (scene === 'complaint' && !closing) {
+        form.elements.tracking_no.value = record.request?.tracking_no || '';
+        form.elements.tracking_no.readOnly = !!record.request?.tracking_no;
+        form.elements.action.onchange = () => { const money = ['goodwill','refund'].includes(form.elements.action.value); form.elements.amount.disabled = !money; if (!money) form.elements.amount.value = '0'; };
+      }
+      form.onsubmit = async event => {
+        event.preventDefault(); if (busy || !form.checkValidity()) return;
+        const val = name => form.elements.namedItem(name).value.trim();
+        let body = {operator:val('operator')};
+        if (closing) body = {...body, outcome:val('outcome'), improvement:val('improvement')};
+        else if (scene === 'claims') body.confirmed = true;
+        else body = {...body, confirmed:true, action:val('action'), amount:form.elements.amount.disabled ? '0' : val('amount'), tracking_no:val('tracking_no') || null, note:val('note')};
+        if (Object.values(body).some(x => x === '')) { message('assistant','请填写有效内容，不能只有空格。',true); return; }
+        await operate('/' + scene + '/' + encodeURIComponent(id) + (closing ? '/close' : '/confirm'), body);
+      };
+      card.append(form);
+    }
+    const refresh = document.createElement('button'); refresh.className = 'link refresh'; refresh.textContent = '刷新记录状态';
+    refresh.onclick = () => { if (!busy) operate('/' + scene + '/' + encodeURIComponent(id)); };
+    card.append(refresh);
+  }
+  async function operate(path, body) {
+    setBusy(true);
+    try { record = await api(path, body); render(); }
+    catch (error) { message('assistant',error.message,true); }
+    finally { setBusy(false); scrollBottom(); }
+  }
+  render();
+}
+$('composer').addEventListener('submit',send);
+$('question').addEventListener('keydown',event => { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); $('composer').requestSubmit(); } });
+$('scene').addEventListener('change',changeScene);
+$('example').onclick = () => { $('order').value = 'DEMO20261112001'; $('tracking').value = 'DEMO_TRACK_001'; };
+$('clear').onclick = () => { $('chat').replaceChildren(); pending = null; $('order').value = ''; $('tracking').value = ''; $('ticket').value = ''; $('question').value = ''; message('assistant','你好！请选择处理场景，然后告诉我需要协助的问题。'); };
+if (location.protocol === 'file:') $('status').textContent = '接口：http://127.0.0.1:8000。直接打开 HTML 时，后端需允许文件页面来源（null）的 CORS 跨域请求。';
+$('clear').click();
+</script>
+</body>
+</html>
